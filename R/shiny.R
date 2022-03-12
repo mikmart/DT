@@ -488,8 +488,9 @@ linkColumnFilters = function(proxy, data) {
   # Keep search strings up to date for each column filter
   search_strings = shiny::reactiveValues()
   shiny::observeEvent(proxy$session$input[[search_id]], {
+    search_cols_input = proxy$session$input[[search_id]]
     for (j in seq_along(data)) {
-      search_strings[[names(data)[j]]] = proxy$session$input[[search_id]][j]
+      search_strings[[names(data)[j]]] = search_cols_input[j]
     }
   })
   
