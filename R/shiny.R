@@ -480,6 +480,45 @@ updateFilters = function(proxy, data) {
   invokeRemote(proxy, 'updateFilters', list(filters))
 }
 
+#' @rdname replaceData
+#' @export
+linkColumnFilters = function(proxy, data) {
+  search_id = paste0(proxy$id, '_search_columns')
+  
+  # Keep search strings up to date for each column filter
+  search_strings = shiny::reactiveValues()
+  shiny::observeEvent(proxy$session$input[[search_id]], {
+    for (j in seq_along(data)) {
+      search_strings[[names(data)[j]]] = proxy$session$input[[search_id]][j]
+    }
+  })
+  
+  # Re-search each filter only when its search string changed
+  filter_indices = shiny::reactiveValues()
+  lapply(names(data), function(j) {
+    shiny::observeEvent(search_strings[[j]], {
+      filter_indices[[j]] = doColumnSearch(data[[j]], search_strings[[j]])
+    })
+  })
+  
+  # When any filter changes, recalculate available options for others
+  shiny::observe({
+    # RVs could be in any order so need to match column order in data
+    fi = shiny::reactiveValuesToList(filter_indices)
+    fi = fi[match(names(data), names(fi))]
+    
+    # Rows available for each filter based on what others would rule out
+    ai = lapply(seq_along(fi), function(j) Reduce(intersect, fi[-j]))
+
+    # Get the corresponding data to update filter options with
+    ad = lapply(Map(`[`, data, ai), function(x) {
+      if (is.factor(x)) droplevels(x) else x
+    })
+    
+    updateFilters(proxy, ad)
+  })
+}
+
 invokeRemote = function(proxy, method, args = list()) {
   if (!inherits(proxy, 'dataTableProxy'))
     stop('Invalid proxy argument; table proxy object was expected')
@@ -630,16 +669,8 @@ dataTablesFilter = function(data, params) {
     if ((k <- col[['search']][['value']]) == '') next
     j = as.integer(j)
     dj = data[, j + 1]
-    ij = if (is.numeric(dj) || is.Date(dj)) {
-      which(filterRange(dj, k))
-    } else if (is.factor(dj)) {
-      which(dj %in% fromJSON(k))
-    } else if (is.logical(dj)) {
-      which(dj %in% as.logical(fromJSON(k)))
-    } else {
-      grep2(k, as.character(dj), fixed = col[['search']][['regex']] == 'false',
-            ignore.case = ci)
-    }
+    rx = !isTRUE(col[['search']][['regex']] == 'false')
+    ij = doColumnSearch(dj, k, options = list(fixed = !rx, ignore.case = ci))
     i = intersect(ij, i)
     if (length(i) == 0) break
   }
@@ -698,6 +729,21 @@ dataTablesFilter = function(data, params) {
     DT_rows_all = iAll,
     DT_rows_current = iCurrent
   )
+}
+
+doColumnSearch = function(x, search_string, options = list()) {
+  if (search_string == '') return(seq_along(x))
+  if (is.numeric(x) || is.Date(x)) {
+    which(filterRange(x, search_string))
+  } else if (is.factor(x)) {
+    which(x %in% fromJSON(search_string))
+  } else if (is.logical(x)) {
+    which(x %in% as.logical(fromJSON(search_string)))
+  } else {
+    fixed = options$fixed %||% TRUE
+    ic = options$ignore.case %||% TRUE
+    grep2(search_string, as.character(x), fixed = fixed, ignore.case = ic)
+  }
 }
 
 # when both ignore.case and fixed are TRUE, we use grep(ignore.case = FALSE,

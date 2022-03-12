@@ -3,11 +3,14 @@
 \name{replaceData}
 \alias{replaceData}
 \alias{updateFilters}
+\alias{linkColumnFilters}
 \title{Replace data in an existing table}
 \usage{
 replaceData(proxy, data, ..., resetPaging = TRUE, clearSelection = "all")
 
 updateFilters(proxy, data)
+
+linkColumnFilters(proxy, data)
 }
 \arguments{
 \item{proxy}{a proxy object created by \code{dataTableProxy()}}
